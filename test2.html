@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>지도 기반 실시간 날씨 웹사이트</title>
+
+  <!-- Leaflet 지도 라이브러리 -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:Arial, sans-serif;
+    }
+
+    body{
+      height:100vh;
+      display:flex;
+      overflow:hidden;
+      background:#111;
+    }
+
+    /* 왼쪽 정보 패널 */
+    .sidebar{
+
+      width:420px;
+
+      background:rgba(20,20,20,0.95);
+
+      color:white;
+
+      padding:30px;
+
+      overflow-y:auto;
+    }
+
+    h1{
+      margin-bottom:15px;
+      font-size:32px;
+    }
+
+    .datetime{
+      margin-bottom:25px;
+      color:#bbb;
+      font-size:18px;
+    }
+
+    .search-box{
+      display:flex;
+      gap:10px;
+      margin-bottom:25px;
+    }
+
+    input{
+
+      flex:1;
+
+      padding:14px;
+
+      border:none;
+
+      border-radius:12px;
+
+      font-size:16px;
+    }
+
+    button{
+
+      padding:14px 18px;
+
+      border:none;
+
+      border-radius:12px;
+
+      background:#4facfe;
+
+      color:white;
+
+      cursor:pointer;
+
+      font-size:16px;
+    }
+
+    button:hover{
+      opacity:0.8;
+    }
+
+    .darkmode-btn{
+      width:100%;
+      margin-bottom:20px;
+      background:#333;
+    }
+
+    .weather-box{
+      margin-top:30px;
+      text-align:center;
+    }
+
+    .icon{
+      font-size:90px;
+      margin:15px 0;
+    }
+
+    .temp{
+      font-size:70px;
+      font-weight:bold;
+      margin:10px 0;
+    }
+
+    .weather{
+      font-size:30px;
+      margin-bottom:20px;
+    }
+
+    .detail{
+      font-size:22px;
+      line-height:2;
+    }
+
+    /* 지도 */
+    #map{
+      flex:1;
+      height:100vh;
+    }
+
+    /* 다크모드 */
+    .dark{
+      background:#f5f5f5;
+      color:black;
+    }
+
+    .dark input{
+      background:white;
+      color:black;
+      border:1px solid #ccc;
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <!-- 왼쪽 UI -->
+  <div class="sidebar" id="sidebar">
+
+    <h1>🗺 실시간 날씨 지도</h1>
+
+    <div class="datetime" id="datetime">
+      현재 시간
+    </div>
+
+    <button class="darkmode-btn" onclick="toggleDarkMode()">
+      🌙 다크모드
+    </button>
+
+    <div class="search-box">
+
+      <input
+        type="text"
+        id="city"
+        placeholder="도시 입력 (예: Seoul)"
+        onkeypress="handleKey(event)"
+      >
+
+      <button onclick="getWeather()">
+        검색
+      </button>
+
+    </div>
+
+    <div class="weather-box">
+
+      <h2 id="cityName">도시명</h2>
+
+      <div class="icon" id="icon">
+        🌤
+      </div>
+
+      <div class="temp" id="temp">
+        --°C
+      </div>
+
+      <div class="weather" id="weather">
+        날씨 상태
+      </div>
+
+      <div class="detail">
+
+        💧 습도 :
+        <span id="humidity">--</span>%<br>
+
+        💨 풍속 :
+        <span id="wind">--</span> km/h
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- 지도 -->
+  <div id="map"></div>
+
+  <script>
+
+    // 지도 생성
+    const map = L.map('map').setView([37.5665, 126.9780], 5);
+
+    // 지도 타일
+    L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        attribution: '© OpenStreetMap'
+      }
+    ).addTo(map);
+
+    // 마커
+    let marker = null;
+
+
+    // Enter 검색
+    function handleKey(event){
+
+      if(event.key === "Enter"){
+
+        getWeather();
+
+      }
+
+    }
+
+
+    // 현재 시간
+    function updateDateTime(){
+
+      const now = new Date();
+
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const date = now.getDate();
+
+      const hour =
+      String(now.getHours()).padStart(2,'0');
+
+      const minute =
+      String(now.getMinutes()).padStart(2,'0');
+
+      const second =
+      String(now.getSeconds()).padStart(2,'0');
+
+      document.getElementById("datetime").innerText =
+      `${year}년 ${month}월 ${date}일 
+      ${hour}:${minute}:${second}`;
+    }
+
+    setInterval(updateDateTime,1000);
+
+    updateDateTime();
+
+
+    // 다크모드
+    function toggleDarkMode(){
+
+      document.getElementById("sidebar")
+      .classList.toggle("dark");
+    }
+
+
+    // 날씨 검색
+    async function getWeather(){
+
+      const city =
+      document.getElementById("city").value;
+
+      if(city === ""){
+
+        alert("도시명을 입력하세요!");
+        return;
+      }
+
+      try{
+
+        // 날씨 정보
+        const weatherResponse =
+        await fetch(`https://wttr.in/${city}?format=j1`);
+
+        const weatherData =
+        await weatherResponse.json();
+
+        const current =
+        weatherData.current_condition[0];
+
+        // 좌표 정보
+        const geoResponse =
+        await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${city}`
+        );
+
+        const geoData =
+        await geoResponse.json();
+
+        const lat =
+        geoData[0].lat;
+
+        const lon =
+        geoData[0].lon;
+
+
+        // 지도 이동
+        map.setView([lat, lon], 10);
+
+        // 기존 마커 제거
+        if(marker){
+
+          map.removeLayer(marker);
+
+        }
+
+        // 새 마커 생성
+        marker =
+        L.marker([lat, lon])
+        .addTo(map)
+        .bindPopup(city)
+        .openPopup();
+
+
+        // 날씨 표시
+        const weatherText =
+        current.weatherDesc[0].value.toLowerCase();
+
+        document.getElementById("cityName").innerText =
+        city;
+
+        document.getElementById("temp").innerText =
+        current.temp_C + "°C";
+
+        document.getElementById("weather").innerText =
+        current.weatherDesc[0].value;
+
+        document.getElementById("humidity").innerText =
+        current.humidity;
+
+        document.getElementById("wind").innerText =
+        current.windspeedKmph;
+
+
+        // 아이콘 변경
+        let icon = "🌤";
+
+        if(weatherText.includes("sunny") ||
+           weatherText.includes("clear")){
+
+          icon = "☀️";
+        }
+
+        else if(weatherText.includes("rain")){
+
+          icon = "🌧";
+        }
+
+        else if(weatherText.includes("cloud")){
+
+          icon = "☁️";
+        }
+
+        else if(weatherText.includes("snow")){
+
+          icon = "❄️";
+        }
+
+        document.getElementById("icon").innerText =
+        icon;
+
+      }
+
+      catch(error){
+
+        alert("도시 정보를 찾을 수 없습니다!");
+
+      }
+
+    }
+
+  </script>
+
+</body>
+</html>
